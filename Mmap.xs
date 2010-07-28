@@ -11,7 +11,9 @@ extern "C" {
 #include <unistd.h>
 
 #ifndef MMAP_RETTYPE
+#ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 199309
+#endif
 #ifdef _POSIX_VERSION
 #if _POSIX_VERSION >= 199309
 #define MMAP_RETTYPE void *
@@ -125,7 +127,7 @@ constant(name,arg)
 SV *
 hardwire(var, addr, len)
         SV *            var
-	unsigned int	addr
+	IV	addr
 	size_t		len
     PROTOTYPE: $$$
     CODE:
@@ -194,7 +196,7 @@ mmap(var, len, prot, flags, fh = 0, off = 0)
 	SvCUR_set(var, len);
 	SvLEN_set(var, slop);
 	SvPOK_only(var);
-        ST(0) = sv_2mortal(newSVnv((int) addr));
+        ST(0) = sv_2mortal(newSVnv((IV) addr));
 
 SV *
 munmap(var)
@@ -203,6 +205,11 @@ munmap(var)
     CODE:
 	ST(0) = &PL_sv_undef;
         /* XXX refrain from dumping core if this var wasnt previously mmap'd */
+        if(SvTYPE(var) != SVt_PV) {
+            croak("map pointer is not a stringundef");
+            return;
+        }
+
         if (munmap((MMAP_RETTYPE) SvPVX(var) - SvLEN(var), SvCUR(var) + SvLEN(var)) == -1) {
             croak("munmap failed! errno %d %s\n", errno, strerror(errno));
             return;
