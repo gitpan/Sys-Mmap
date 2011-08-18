@@ -1,5 +1,10 @@
-Todd Rinaldo April 7 2011 v0.15_01
-* Default 6th parameter in mmap call to undef since we're defaulting the 5th.
+Todd Rinaldo August 18 2011 v0.15_02
+* Pause blocked.
+
+Todd Rinaldo August 18 2011 v0.15_01
+* Patch from RT 70333 (Syohei YOSHIDA) to make error testing locale neutral
+* Add test for GLOB mmap
+* Make temp file larger for testing additional cases.
 
 Todd Rinaldo April 4 2011 v0.15
 * cpantesters looks good besides Win32. Waiting for someone from windows
