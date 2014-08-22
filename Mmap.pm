@@ -2,7 +2,7 @@ package Sys::Mmap;
 
 =head1 NAME
 
-Sys::Mmap - uses mmap to map in a file as a Perl variable
+Mmap - uses mmap to map in a file as a Perl variable
 
 =head1 SYNOPSIS
 
@@ -180,15 +180,17 @@ compliant and contributed documentation as well.
 =cut
 
 use strict;
-our ($VERSION, @ISA, @EXPORT, $AUTOLOAD);
+use Carp;
+use vars qw($VERSION @ISA @EXPORT $AUTOLOAD);
+require DynaLoader;
 require Exporter;
-@ISA = qw(Exporter);
+@ISA = qw(Exporter DynaLoader);
 
 @EXPORT = qw(mmap munmap
 	     MAP_ANON MAP_ANONYMOUS MAP_FILE MAP_PRIVATE MAP_SHARED
 	     PROT_EXEC PROT_NONE PROT_READ PROT_WRITE);
 
-$VERSION = '0.16';
+$VERSION = '0.14';
 
 sub new {
 
@@ -224,6 +226,7 @@ sub TIESCALAR {
               constant('MAP_SHARED',0);
 
   if($file) {
+    local $^F = 100;
     open $fh, '+>>', $file or do {
       warn "mmap: could not open file '$file' for append r/w";
       return undef;
@@ -271,36 +274,23 @@ sub AUTOLOAD {
     # XS function.  If a constant is not found then control is passed
     # to the AUTOLOAD in AutoLoader.
 
-    if ($AUTOLOAD =~ /::(_?[a-z])/) {
-        $AutoLoader::AUTOLOAD = $AUTOLOAD;
-        goto &AutoLoader::AUTOLOAD;
-    }
-
-    local $! = 0;
-    my $constname = $AUTOLOAD;
-    $constname =~ s/.*:://;
-    return if $constname eq 'DESTROY';
+    my $constname;
+    ($constname = $AUTOLOAD) =~ s/.*:://;
     my $val = constant($constname, @_ ? $_[0] : 0);
-    if ($! == 0) {
-        no strict 'refs';
-        *$AUTOLOAD = sub { $val };
+    if ($! != 0) {
+	if ($! =~ /Invalid/) {
+	    $AutoLoader::AUTOLOAD = $AUTOLOAD;
+	    goto &AutoLoader::AUTOLOAD;
+	}
+	else {
+		croak "Your vendor has not defined Mmap macro $constname";
+	}
     }
-    else {
-        require Carp;
-        Carp::croak("Your vendor has not defined Mmap macro $constname");
-    }
-
+    eval "sub $AUTOLOAD { $val }";
     goto &$AUTOLOAD;
 }
 
-eval {
-       require XSLoader;
-       XSLoader::load( 'Sys::Mmap', $VERSION );
-} or do {
-    require DynaLoader;
-    push @ISA, 'DynaLoader';
-    bootstrap Sys::Mmap $VERSION;
-};
+bootstrap Sys::Mmap $VERSION;
 
 1;
 
