@@ -4,6 +4,7 @@ extern "C" {
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"
+#include <stdlib.h>
 #ifdef __cplusplus
 }
 #endif
@@ -11,7 +12,9 @@ extern "C" {
 #include <unistd.h>
 
 #ifndef MMAP_RETTYPE
+#ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 199309
+#endif
 #ifdef _POSIX_VERSION
 #if _POSIX_VERSION >= 199309
 #define MMAP_RETTYPE void *
@@ -73,6 +76,12 @@ int arg;
 #else
 	    goto not_there;
 #endif
+        if (strEQ(name, "MAP_LOCKED"))
+#ifdef MAP_LOCKED
+            return MAP_LOCKED;
+#else
+            goto not_there;
+#endif
 	break;
     case 'P':
 	if (strEQ(name, "PROT_EXEC"))
@@ -111,7 +120,14 @@ not_there:
     return 0;
 }
 
-static size_t pagesize;
+static size_t pagesize = 0;
+
+
+#if _FILE_OFFSET_BITS > 32
+#define get_off(a) (atoll(a))
+#else
+#define get_off(a) (atoi(a))
+#endif
 
 
 MODULE = Sys::Mmap		PACKAGE = Sys::Mmap
@@ -125,7 +141,7 @@ constant(name,arg)
 SV *
 hardwire(var, addr, len)
         SV *            var
-	unsigned int	addr
+	IV	addr
 	size_t		len
     PROTOTYPE: $$$
     CODE:
@@ -139,20 +155,33 @@ hardwire(var, addr, len)
         ST(0) = &PL_sv_yes;
 
 
+
 SV *
-mmap(var, len, prot, flags, fh = 0, off = 0)
+mmap(var, len, prot, flags, fh = 0, off_string)
 	SV *		var
 	size_t		len
 	int		prot
 	int		flags
 	FILE *		fh
-	off_t		off
+    SV *  off_string
 	int		fd = NO_INIT
 	MMAP_RETTYPE	addr = NO_INIT
 	off_t		slop = NO_INIT
+    off_t off = NO_INIT
     PROTOTYPE: $$$$*;$
     CODE:
 
+    if(!SvTRUE(off_string)) {
+        off = 0;
+    }
+    else {
+        off = get_off(SvPVbyte_nolen(off_string));
+    }
+    
+    if(off < 0) {
+        croak("mmap: Cannot operate on a negative offset (%s) ", SvPVbyte_nolen(off_string));
+    }
+    
 	ST(0) = &PL_sv_undef;
         if(flags&MAP_ANON) {
           fd = -1;
@@ -178,13 +207,18 @@ mmap(var, len, prot, flags, fh = 0, off = 0)
 	      pagesize = getpagesize();
 	}
 
-	slop = off % pagesize;
+    slop = (size_t) off % pagesize;
 
 	addr = mmap(0, len + slop, prot, flags, fd, off - slop);
 	if (addr == MAP_FAILED) {
             croak("mmap: mmap call failed: errno: %d errmsg: %s ", errno, strerror(errno));
         }
-	printf("debug: mmap: address is %x, off is %d, and slop is %d\n", addr, off, slop);
+#if PERL_VERSION >= 20
+
+        if (SvIsCOW(var)) {
+            sv_force_normal_flags(var, 0);
+        }
+#endif
 
 	SvUPGRADE(var, SVt_PV);
 	if (!(prot & PROT_WRITE))
@@ -195,7 +229,7 @@ mmap(var, len, prot, flags, fh = 0, off = 0)
 	SvCUR_set(var, len);
 	SvLEN_set(var, slop);
 	SvPOK_only(var);
-        ST(0) = sv_2mortal(newSVnv((int) addr));
+        ST(0) = sv_2mortal(newSVnv((IV) addr));
 
 SV *
 munmap(var)
@@ -204,6 +238,15 @@ munmap(var)
     CODE:
 	ST(0) = &PL_sv_undef;
         /* XXX refrain from dumping core if this var wasnt previously mmap'd */
+	if(!SvOK(var)) { /* Detect if variable is undef */
+            croak("undef variable not unmappable");
+            return;
+	}
+        if(SvTYPE(var) < SVt_PV || SvTYPE(var) > SVt_PVMG) {
+           croak("variable is not a string, type is: %d", SvTYPE(var));
+            return;
+        }
+
         if (munmap((MMAP_RETTYPE) SvPVX(var) - SvLEN(var), SvCUR(var) + SvLEN(var)) == -1) {
             croak("munmap failed! errno %d %s\n", errno, strerror(errno));
             return;

@@ -1,14 +1,16 @@
 ---
-abstract: unknown
+abstract: 'uses mmap to map in a file as a Perl variable'
 author:
-  - unknown
+  - 'Scott Walters <swalters@cpan.org>'
 build_requires:
+  Errno: 0
   ExtUtils::MakeMaker: 0
+  Test::More: 0
 configure_requires:
   ExtUtils::MakeMaker: 0
 dynamic_config: 1
-generated_by: 'ExtUtils::MakeMaker version 6.88, CPAN::Meta::Converter version 2.133380'
-license: unknown
+generated_by: 'ExtUtils::MakeMaker version 6.62, CPAN::Meta::Converter version 2.120921'
+license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
   version: 1.4
@@ -17,8 +19,12 @@ no_index:
   directory:
     - t
     - inc
-requires: {}
+requires:
+  DynaLoader: 0
+  Test::More: 0
+  XSLoader: 0
 resources:
-  bugtracker: https://github.com/scrottie/Sys-Mmap/issues
-  repository: https://github.com/scrottie/Sys-Mmap
-version: 0.14
+  bugtracker: https://github.com/toddr/Sys-Mmap/issues
+  license: http://dev.perl.org/licenses/
+  repository: http://github.com/toddr/Sys-Mmap/tree/master
+version: 0.17_01

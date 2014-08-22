@@ -2,7 +2,7 @@ package Sys::Mmap;
 
 =head1 NAME
 
-Mmap - uses mmap to map in a file as a Perl variable
+Sys::Mmap - uses mmap to map in a file as a Perl variable
 
 =head1 SYNOPSIS
 
@@ -170,27 +170,24 @@ mmap()'d previously, or if it has since been reallocated by Perl.
 
 =head1 AUTHOR
 
+Todd Rinaldo cleaned up code, modernized again, and merged in many fixes, 2010-2011.
+
+Scott Walters updated for Perl 5.6.x, additions, 2002.
+
 Malcolm Beattie, 21 June 1996.
-
-Updated for Perl 5.6.x, additions, Scott Walters, Feb 2002.
-
-Aaron Kaplan kindly contributed patches to make the C ANSI
-compliant and contributed documentation as well.
 
 =cut
 
 use strict;
-use Carp;
-use vars qw($VERSION @ISA @EXPORT $AUTOLOAD);
-require DynaLoader;
+our ($VERSION, @ISA, @EXPORT, $AUTOLOAD);
 require Exporter;
-@ISA = qw(Exporter DynaLoader);
+@ISA = qw(Exporter);
 
 @EXPORT = qw(mmap munmap
-	     MAP_ANON MAP_ANONYMOUS MAP_FILE MAP_PRIVATE MAP_SHARED
+	     MAP_ANON MAP_ANONYMOUS MAP_FILE MAP_LOCKED MAP_PRIVATE MAP_SHARED
 	     PROT_EXEC PROT_NONE PROT_READ PROT_WRITE);
 
-$VERSION = '0.14';
+$VERSION = '0.17_01';
 
 sub new {
 
@@ -226,7 +223,6 @@ sub TIESCALAR {
               constant('MAP_SHARED',0);
 
   if($file) {
-    local $^F = 100;
     open $fh, '+>>', $file or do {
       warn "mmap: could not open file '$file' for append r/w";
       return undef;
@@ -274,23 +270,36 @@ sub AUTOLOAD {
     # XS function.  If a constant is not found then control is passed
     # to the AUTOLOAD in AutoLoader.
 
-    my $constname;
-    ($constname = $AUTOLOAD) =~ s/.*:://;
-    my $val = constant($constname, @_ ? $_[0] : 0);
-    if ($! != 0) {
-	if ($! =~ /Invalid/) {
-	    $AutoLoader::AUTOLOAD = $AUTOLOAD;
-	    goto &AutoLoader::AUTOLOAD;
-	}
-	else {
-		croak "Your vendor has not defined Mmap macro $constname";
-	}
+    if ($AUTOLOAD =~ /::(_?[a-z])/) {
+        $AutoLoader::AUTOLOAD = $AUTOLOAD;
+        goto &AutoLoader::AUTOLOAD;
     }
-    eval "sub $AUTOLOAD { $val }";
+
+    local $! = 0;
+    my $constname = $AUTOLOAD;
+    $constname =~ s/.*:://;
+    return if $constname eq 'DESTROY';
+    my $val = constant($constname, @_ ? $_[0] : 0);
+    if ($! == 0) {
+        no strict 'refs';
+        *$AUTOLOAD = sub { $val };
+    }
+    else {
+        require Carp;
+        Carp::croak("Your vendor has not defined Mmap macro $constname");
+    }
+
     goto &$AUTOLOAD;
 }
 
-bootstrap Sys::Mmap $VERSION;
+eval {
+       require XSLoader;
+       XSLoader::load( 'Sys::Mmap', $VERSION );
+} or do {
+    require DynaLoader;
+    push @ISA, 'DynaLoader';
+    bootstrap Sys::Mmap $VERSION;
+};
 
 1;
 
